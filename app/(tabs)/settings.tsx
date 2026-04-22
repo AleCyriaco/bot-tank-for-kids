@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   Text,
   View,
@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Platform,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useTankConnection } from "@/lib/tank-connection";
@@ -69,6 +70,13 @@ function batColor(b: number): string {
   return "#00FF88";
 }
 
+interface AudioDevice {
+  name: string;
+  index?: number;
+  type?: string;
+  isDefault?: boolean;
+}
+
 export default function SettingsScreen() {
   const {
     piAddress,
@@ -86,6 +94,11 @@ export default function SettingsScreen() {
   const [localPort, setLocalPort] = useState(piPort);
   const [volume, setVolume] = useState(80);
   const [ttsText, setTtsText] = useState("");
+  const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
+  const [testingMic, setTestingMic] = useState(false);
+  const [testingSpeaker, setTestingSpeaker] = useState(false);
+  const [micTestResult, setMicTestResult] = useState<string | null>(null);
 
   const handleConnect = useCallback(() => {
     setPiAddress(localIp);
@@ -96,6 +109,58 @@ export default function SettingsScreen() {
   const handleDisconnect = useCallback(() => {
     disconnect();
   }, [disconnect]);
+
+  // Fetch audio devices from Pi
+  const fetchAudioDevices = useCallback(async () => {
+    if (!connected) return;
+    setLoadingDevices(true);
+    try {
+      const response = await fetch(`${baseUrl}/api/audio/devices`);
+      const data = await response.json();
+      if (data.ok && data.devices) {
+        setAudioDevices(data.devices);
+      } else if (data.ok && Array.isArray(data.input)) {
+        // Alternative format
+        const devices: AudioDevice[] = [];
+        if (data.input) {
+          data.input.forEach((d: any) =>
+            devices.push({ name: d.name || d, type: "input", index: d.index })
+          );
+        }
+        if (data.output) {
+          data.output.forEach((d: any) =>
+            devices.push({ name: d.name || d, type: "output", index: d.index })
+          );
+        }
+        setAudioDevices(devices);
+      }
+    } catch {
+      // Silently fail
+    } finally {
+      setLoadingDevices(false);
+    }
+  }, [connected, baseUrl]);
+
+  // Fetch volume from Pi
+  const fetchVolume = useCallback(async () => {
+    if (!connected) return;
+    try {
+      const response = await fetch(`${baseUrl}/api/audio/volume_get`);
+      const data = await response.json();
+      if (data.ok && typeof data.volume === "number") {
+        setVolume(data.volume);
+      }
+    } catch {
+      // Silently fail
+    }
+  }, [connected, baseUrl]);
+
+  useEffect(() => {
+    if (connected) {
+      fetchAudioDevices();
+      fetchVolume();
+    }
+  }, [connected, fetchAudioDevices, fetchVolume]);
 
   const handleVolumeChange = useCallback(
     async (val: number) => {
@@ -123,16 +188,41 @@ export default function SettingsScreen() {
       setTtsText("");
     } catch (err: any) {
       if (Platform.OS !== "web") {
-        Alert.alert("Error", err.message);
+        Alert.alert("Erro", err.message);
       }
     }
   }, [ttsText, connected, baseUrl]);
 
   const handleTestSpeaker = useCallback(async () => {
     if (!connected) return;
+    setTestingSpeaker(true);
     try {
       await fetch(`${baseUrl}/api/audio/test_speaker`, { method: "POST" });
     } catch {}
+    setTimeout(() => setTestingSpeaker(false), 2000);
+  }, [connected, baseUrl]);
+
+  const handleTestMic = useCallback(async () => {
+    if (!connected) return;
+    setTestingMic(true);
+    setMicTestResult(null);
+    try {
+      const response = await fetch(`${baseUrl}/api/audio/test_mic`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ duration: 3 }),
+      });
+      const data = await response.json();
+      if (data.ok) {
+        setMicTestResult(data.text || data.message || "Mic OK - Áudio capturado com sucesso");
+      } else {
+        setMicTestResult(data.error || "Falha no teste do microfone");
+      }
+    } catch (err: any) {
+      setMicTestResult(`Erro: ${err.message}`);
+    } finally {
+      setTestingMic(false);
+    }
   }, [connected, baseUrl]);
 
   return (
@@ -140,16 +230,16 @@ export default function SettingsScreen() {
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         {/* Connection */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>PI CONNECTION</Text>
+          <Text style={styles.cardTitle}>CONEXÃO PI</Text>
           <View style={styles.connStatus}>
             <View style={[styles.connDot, connected ? styles.connDotOk : styles.connDotErr]} />
             <Text style={[styles.connText, connected ? styles.connTextOk : styles.connTextErr]}>
-              {connected ? "Connected" : "Disconnected"}
+              {connected ? "Conectado" : "Desconectado"}
             </Text>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>IP Address</Text>
+            <Text style={styles.inputLabel}>Endereço IP</Text>
             <TextInput
               style={styles.textInput}
               value={localIp}
@@ -163,7 +253,7 @@ export default function SettingsScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Port</Text>
+            <Text style={styles.inputLabel}>Porta</Text>
             <TextInput
               style={styles.textInput}
               value={localPort}
@@ -179,20 +269,96 @@ export default function SettingsScreen() {
               onPress={handleConnect}
               style={({ pressed }) => [styles.btn, styles.btnSuccess, pressed && { opacity: 0.7 }]}
             >
-              <Text style={styles.btnSuccessText}>Connect</Text>
+              <Text style={styles.btnSuccessText}>Conectar</Text>
             </Pressable>
             <Pressable
               onPress={handleDisconnect}
               style={({ pressed }) => [styles.btn, styles.btnDanger, pressed && { opacity: 0.7 }]}
             >
-              <Text style={styles.btnDangerText}>Disconnect</Text>
+              <Text style={styles.btnDangerText}>Desconectar</Text>
             </Pressable>
+          </View>
+        </View>
+
+        {/* Audio Devices (USB Mic) */}
+        <View style={styles.card}>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.cardTitle}>DISPOSITIVOS DE ÁUDIO</Text>
+            <Pressable
+              onPress={fetchAudioDevices}
+              style={({ pressed }) => [styles.refreshBtn, pressed && { opacity: 0.7 }]}
+              disabled={!connected}
+            >
+              <Text style={styles.refreshBtnText}>↻ Atualizar</Text>
+            </Pressable>
+          </View>
+
+          {!connected && (
+            <Text style={styles.noData}>Conecte ao Pi para ver dispositivos</Text>
+          )}
+
+          {connected && loadingDevices && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color="#00FF88" />
+              <Text style={styles.loadingText}>Buscando dispositivos...</Text>
+            </View>
+          )}
+
+          {connected && !loadingDevices && audioDevices.length === 0 && (
+            <Text style={styles.noData}>Nenhum dispositivo encontrado</Text>
+          )}
+
+          {audioDevices.map((device, i) => (
+            <View key={i} style={styles.deviceRow}>
+              <View style={styles.deviceIcon}>
+                <Text style={styles.deviceIconText}>
+                  {device.type === "input" ? "🎤" : "🔊"}
+                </Text>
+              </View>
+              <View style={styles.deviceInfo}>
+                <Text style={styles.deviceName} numberOfLines={1}>
+                  {device.name}
+                </Text>
+                <Text style={styles.deviceType}>
+                  {device.type === "input" ? "Entrada (Mic)" : "Saída (Speaker)"}
+                  {device.isDefault ? " ★ Padrão" : ""}
+                </Text>
+              </View>
+            </View>
+          ))}
+
+          <View style={styles.micTestSection}>
+            <Text style={styles.sectionLabel}>TESTE DE MICROFONE USB</Text>
+            <Pressable
+              onPress={handleTestMic}
+              style={({ pressed }) => [
+                styles.btn,
+                styles.btnOutline,
+                testingMic && styles.btnActive,
+                pressed && { opacity: 0.7 },
+              ]}
+              disabled={!connected || testingMic}
+            >
+              {testingMic ? (
+                <View style={styles.testingRow}>
+                  <ActivityIndicator size="small" color="#7AA2F7" />
+                  <Text style={styles.btnOutlineText}>Gravando 3s...</Text>
+                </View>
+              ) : (
+                <Text style={styles.btnOutlineText}>🎤 Testar Microfone</Text>
+              )}
+            </Pressable>
+            {micTestResult && (
+              <View style={styles.micResultBox}>
+                <Text style={styles.micResultText}>{micTestResult}</Text>
+              </View>
+            )}
           </View>
         </View>
 
         {/* System Info */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>SYSTEM INFO</Text>
+          <Text style={styles.cardTitle}>INFORMAÇÕES DO SISTEMA</Text>
           {sysinfo ? (
             <>
               <ProgressRow
@@ -208,16 +374,16 @@ export default function SettingsScreen() {
                 color={ramColor(sysinfo.ram_pct)}
               />
               <InfoRow
-                label="Temperature"
+                label="Temperatura"
                 value={`${sysinfo.temp}°C`}
                 color={tempColor(sysinfo.temp)}
               />
-              <InfoRow label="GPU Memory" value={sysinfo.gpu_mem} />
-              <InfoRow label="IP Address" value={sysinfo.ip} color="#00FF88" />
+              <InfoRow label="Memória GPU" value={sysinfo.gpu_mem} />
+              <InfoRow label="Endereço IP" value={sysinfo.ip} color="#00FF88" />
 
               {sysinfo.ard_bat && sysinfo.ard_bat.pct >= 0 && (
                 <ProgressRow
-                  label="Arduino Battery"
+                  label="Bateria Arduino"
                   value={`${sysinfo.ard_bat.pct}% (${sysinfo.ard_bat.v}V)`}
                   pct={sysinfo.ard_bat.pct}
                   color={batColor(sysinfo.ard_bat.pct)}
@@ -226,7 +392,7 @@ export default function SettingsScreen() {
 
               {sysinfo.pi_bat && sysinfo.pi_bat.pct >= 0 && (
                 <ProgressRow
-                  label="Pi Battery"
+                  label="Bateria Pi"
                   value={`${sysinfo.pi_bat.pct}% (${sysinfo.pi_bat.v}V)`}
                   pct={sysinfo.pi_bat.pct}
                   color={batColor(sysinfo.pi_bat.pct)}
@@ -235,14 +401,14 @@ export default function SettingsScreen() {
             </>
           ) : (
             <Text style={styles.noData}>
-              {connected ? "Waiting for system data..." : "Connect to Pi to see system info"}
+              {connected ? "Aguardando dados do sistema..." : "Conecte ao Pi para ver informações"}
             </Text>
           )}
         </View>
 
         {/* Audio Controls */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>AUDIO CONTROLS</Text>
+          <Text style={styles.cardTitle}>CONTROLES DE ÁUDIO</Text>
 
           <View style={styles.volumeRow}>
             <Text style={styles.volumeLabel}>Volume</Text>
@@ -261,19 +427,28 @@ export default function SettingsScreen() {
             </Pressable>
           </View>
 
-          <Pressable
-            onPress={handleTestSpeaker}
-            style={({ pressed }) => [styles.btn, styles.btnOutline, pressed && { opacity: 0.7 }]}
-          >
-            <Text style={styles.btnOutlineText}>Test Speaker</Text>
-          </Pressable>
+          <View style={styles.btnRow}>
+            <Pressable
+              onPress={handleTestSpeaker}
+              style={({ pressed }) => [
+                styles.btn,
+                styles.btnOutline,
+                pressed && { opacity: 0.7 },
+              ]}
+              disabled={!connected || testingSpeaker}
+            >
+              <Text style={styles.btnOutlineText}>
+                {testingSpeaker ? "Tocando..." : "🔊 Testar Speaker"}
+              </Text>
+            </Pressable>
+          </View>
 
           <View style={styles.ttsRow}>
             <TextInput
               style={[styles.textInput, { flex: 1 }]}
               value={ttsText}
               onChangeText={setTtsText}
-              placeholder="Text to speak..."
+              placeholder="Texto para falar..."
               placeholderTextColor="#555"
               returnKeyType="done"
               onSubmitEditing={handleSpeak}
@@ -282,18 +457,31 @@ export default function SettingsScreen() {
               onPress={handleSpeak}
               style={({ pressed }) => [styles.btn, styles.btnSuccess, pressed && { opacity: 0.7 }]}
             >
-              <Text style={styles.btnSuccessText}>Speak</Text>
+              <Text style={styles.btnSuccessText}>Falar</Text>
             </Pressable>
           </View>
         </View>
 
+        {/* Voice Config */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>CONFIGURAÇÃO DE VOZ</Text>
+          <InfoRow label="Wake Word" value='"Wall-E"' color="#00FF88" />
+          <InfoRow label="STT Engine" value="Whisper (Pi)" />
+          <InfoRow label="TTS Engine" value="pyttsx3 (Pi)" />
+          <InfoRow label="Idioma" value="Português (pt-BR)" />
+          <Text style={styles.helpText}>
+            Na aba Chat, toque no 🎤 para gravar do celular ou use "Mic Pi" para gravar pelo microfone USB do robô. A IA responde e pode controlar o robô automaticamente.
+          </Text>
+        </View>
+
         {/* About */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>ABOUT</Text>
+          <Text style={styles.cardTitle}>SOBRE</Text>
           <InfoRow label="App" value="Tank Brain Controller" />
-          <InfoRow label="Version" value="1.0.0" />
-          <InfoRow label="Robot" value="Tank Pi Brain v1.0" />
+          <InfoRow label="Versão" value="1.1.0" />
+          <InfoRow label="Robô" value="Tank Pi Brain v1.0" />
           <InfoRow label="Arduino" value="Tank v6 Pi-Slave" />
+          <InfoRow label="Wake Word" value="Wall-E" color="#00FF88" />
         </View>
       </ScrollView>
     </ScreenContainer>
@@ -318,11 +506,28 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 10,
   },
+  cardTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   cardTitle: {
     fontSize: 10,
     color: "#8B949E",
     letterSpacing: 1.5,
     fontWeight: "bold",
+    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+  },
+  refreshBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#30363D",
+  },
+  refreshBtnText: {
+    fontSize: 10,
+    color: "#8B949E",
     fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
   },
   connStatus: {
@@ -410,9 +615,95 @@ const styles = StyleSheet.create({
     backgroundColor: "#21262D",
     borderColor: "#30363D",
   },
+  btnActive: {
+    borderColor: "#7AA2F7",
+    backgroundColor: "rgba(122,162,247,0.08)",
+  },
   btnOutlineText: {
     color: "#E6EDF3",
     fontSize: 13,
+    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+  },
+  testingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  // Device list
+  deviceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#21262D",
+  },
+  deviceIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: "#21262D",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  deviceIconText: {
+    fontSize: 16,
+  },
+  deviceInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  deviceName: {
+    fontSize: 12,
+    color: "#E6EDF3",
+    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+  },
+  deviceType: {
+    fontSize: 10,
+    color: "#8B949E",
+    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+  },
+  loadingText: {
+    fontSize: 12,
+    color: "#8B949E",
+    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+  },
+  micTestSection: {
+    gap: 8,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: "#21262D",
+  },
+  sectionLabel: {
+    fontSize: 9,
+    color: "#8B949E",
+    letterSpacing: 1,
+    fontWeight: "bold",
+    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+  },
+  micResultBox: {
+    backgroundColor: "#0D1117",
+    borderWidth: 1,
+    borderColor: "#30363D",
+    borderRadius: 6,
+    padding: 10,
+  },
+  micResultText: {
+    fontSize: 11,
+    color: "#7AA2F7",
+    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+    lineHeight: 16,
+  },
+  helpText: {
+    fontSize: 11,
+    color: "#8B949E",
+    lineHeight: 16,
     fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
   },
   // System Info

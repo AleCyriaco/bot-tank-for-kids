@@ -21,3 +21,9 @@
 - [x] Update app.config.ts with branding
 - [x] Keep screen awake on Control tab
 - [x] Create comprehensive project documentation for future adjustments
+- [x] Configure USB mic support on Pi (audio device selection)
+- [x] Add voice control button with wake word "Wall-E" in Chat screen
+- [x] Implement STT (Speech-to-Text) via Pi's Whisper API from mobile mic
+- [x] Integrate real-time camera AI vision in chat (AI sees through robot camera)
+- [x] Add voice recording from phone mic and send to Pi for processing
+- [x] Show AI-generated robot commands from voice/chat responses
