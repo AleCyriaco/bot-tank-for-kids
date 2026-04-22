@@ -27,3 +27,4 @@
 - [x] Integrate real-time camera AI vision in chat (AI sees through robot camera)
 - [x] Add voice recording from phone mic and send to Pi for processing
 - [x] Show AI-generated robot commands from voice/chat responses
+- [x] Fix mic icon overlapping chat commands in input bar
