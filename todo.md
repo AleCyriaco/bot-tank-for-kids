@@ -1,0 +1,23 @@
+# Project TODO
+
+- [x] Configure dark theme colors (robot control panel style)
+- [x] Set up 4-tab navigation (Control, Sensors, Chat, Settings)
+- [x] Add icon mappings for all tabs
+- [x] Create SocketIO connection service/context
+- [x] Build Control screen with live camera feed
+- [x] Build D-pad controls with press-and-hold behavior
+- [x] Add Manual/Auto mode toggle
+- [x] Add connection status indicators
+- [x] Build Sensors screen with distance bars
+- [x] Add IR sensor indicators
+- [x] Add vision zone bars
+- [x] Add servo angle display
+- [x] Build AI Chat screen with message list
+- [x] Add text input and send functionality for chat
+- [x] Build Settings screen with Pi connection config
+- [x] Add system info display (CPU, RAM, temp, battery)
+- [x] Add volume control for Pi speaker
+- [x] Generate custom app icon
+- [x] Update app.config.ts with branding
+- [x] Keep screen awake on Control tab
+- [x] Create comprehensive project documentation for future adjustments
