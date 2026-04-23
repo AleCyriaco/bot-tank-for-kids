@@ -294,22 +294,7 @@ export default function ChatScreen() {
           </View>
         </View>
 
-        {/* Quick Commands */}
-        <View style={styles.quickRow}>
-          {quickCommands.map((qc, i) => (
-            <Pressable
-              key={i}
-              onPress={() => sendTextToAI(qc.label)}
-              style={({ pressed }) => [styles.quickBtn, pressed && { opacity: 0.7 }]}
-              disabled={loading}
-            >
-              <Text style={styles.quickIcon}>{qc.icon}</Text>
-              <Text style={styles.quickLabel} numberOfLines={1}>{qc.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        {/* Mic Button — large, centered, right below quick commands */}
+        {/* Mic Button — large, centered, right below header */}
         <View style={styles.micSection}>
           <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
             <Pressable
@@ -346,6 +331,21 @@ export default function ChatScreen() {
               </Pressable>
             ))}
           </View>
+        </View>
+
+        {/* Quick Commands */}
+        <View style={styles.quickRow}>
+          {quickCommands.map((qc, i) => (
+            <Pressable
+              key={i}
+              onPress={() => sendTextToAI(qc.label)}
+              style={({ pressed }) => [styles.quickBtn, pressed && { opacity: 0.7 }]}
+              disabled={loading}
+            >
+              <Text style={styles.quickIcon}>{qc.icon}</Text>
+              <Text style={styles.quickLabel} numberOfLines={1}>{qc.label}</Text>
+            </Pressable>
+          ))}
         </View>
 
         {/* Messages */}
@@ -568,40 +568,45 @@ const styles = StyleSheet.create({
   visionLabel: { fontSize: 11, color: "#9BA1A6" },
   micSection: {
     alignItems: "center",
-    paddingVertical: 10,
+    paddingVertical: 14,
     paddingHorizontal: 12,
     gap: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#1E2A3A",
-    backgroundColor: "rgba(0,255,136,0.03)",
+    borderBottomWidth: 1,
+    borderBottomColor: "#2A1A00",
+    backgroundColor: "rgba(255,120,0,0.05)",
   },
   micBtnLarge: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-    backgroundColor: "#1E2A1E",
-    borderRadius: 28,
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-    borderWidth: 2,
-    borderColor: "#00FF88",
-    minWidth: 200,
+    gap: 12,
+    backgroundColor: "#FF6B00",
+    borderRadius: 32,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderWidth: 2.5,
+    borderColor: "#FFD700",
+    minWidth: 220,
+    shadowColor: "#FF6B00",
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 8,
   },
   micBtnLargeListening: {
-    backgroundColor: "rgba(0,255,136,0.18)",
-    borderColor: "#00FF88",
-    shadowColor: "#00FF88",
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
+    backgroundColor: "#FF3300",
+    borderColor: "#FF6B00",
+    shadowColor: "#FF3300",
+    shadowOpacity: 0.7,
+    shadowRadius: 14,
+    elevation: 10,
   },
-  micBtnLargeIcon: { fontSize: 26 },
+  micBtnLargeIcon: { fontSize: 28 },
   micBtnLargeLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "bold",
-    color: "#00FF88",
+    color: "#FFD700",
     fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+    letterSpacing: 0.5,
   },
   durationRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   durationLabel: { fontSize: 10, color: "#555" },
