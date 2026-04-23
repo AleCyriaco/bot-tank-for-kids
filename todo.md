@@ -36,6 +36,9 @@
 - [x] Change mic button to use Pi's USB mic instead of browser/phone mic for voice input
 - [x] Add mic volume control to Settings screen (adjust USB mic gain from app)
 - [x] Add mic volume GET/SET endpoints to Pi tank_server.py
-- [ ] Add .gitignore to protect sensitive files (ai_config.json, .env, etc.)
-- [ ] Create GitHub release v1.0
-- [ ] Add repository topics (raspberry-pi, expo, react-native, robot, iot)
+- [x] Add .gitignore to protect sensitive files (ai_config.json, .env, etc.)
+- [x] Create GitHub release v1.0
+- [x] Add repository topics (raspberry-pi, expo, react-native, robot, iot)
+- [x] Fix STT browser warning appearing repeatedly in Chat screen
+- [x] Add API key configuration UI in Settings (for OpenAI/Claude)
+- [ ] Create v1.0.0 release presentation script and slide deck
