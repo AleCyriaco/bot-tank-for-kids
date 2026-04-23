@@ -42,6 +42,8 @@ export default function ChatScreen() {
   const [isListening, setIsListening] = useState(false);
   const [listenSeconds, setListenSeconds] = useState(0);
   const [listenDuration, setListenDuration] = useState(5);
+  const [autoTts, setAutoTts] = useState(true);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -91,6 +93,37 @@ export default function ChatScreen() {
     [autoExecCommands, connected, sendCommand]
   );
 
+  // autoTts ref to avoid circular dependency with speakWithPi
+  const autoTtsRef = useRef(autoTts);
+  useEffect(() => { autoTtsRef.current = autoTts; }, [autoTts]);
+
+  // ── TTS: send AI reply text to Pi speaker ──────────────────────────────────
+  const speakWithPiRef = useRef<((text: string) => Promise<void>) | null>(null);
+  const speakWithPi = useCallback(async (text: string) => {
+    if (!connected || !text.trim()) return;
+    setIsSpeaking(true);
+    try {
+      const resp = await fetch(`${baseUrl}/api/ai/tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text.slice(0, 500) }),
+      });
+      const ct = resp.headers.get("content-type") || "";
+      if (!resp.ok || ct.includes("json")) {
+        await fetch(`${baseUrl}/api/audio/say`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: text.slice(0, 500) }),
+        });
+      }
+    } catch (_) {
+      // Silent fail — TTS is optional
+    } finally {
+      setIsSpeaking(false);
+    }
+  }, [connected, baseUrl]);
+  speakWithPiRef.current = speakWithPi;
+
   const sendTextToAI = useCallback(
     async (text: string) => {
       if (!text.trim() || loading) return;
@@ -119,6 +152,8 @@ export default function ChatScreen() {
           cleanText = cleanText.replace(/\[CMD:[A-Z]+\]/g, "").trim();
           addMessage({ role: "ai", text: cleanText || "(sem resposta)", commands: cmds });
           if (cmds.length > 0) executeCommands(cmds);
+          // Auto TTS: speak AI reply on Pi speaker
+          if (autoTtsRef.current && cleanText) speakWithPiRef.current?.(cleanText);
         } else {
           addMessage({ role: "error", text: data.error || "Falha na IA" });
         }
@@ -378,6 +413,15 @@ export default function ChatScreen() {
           >
             <View style={[styles.visionCheck, useVision && styles.visionCheckOn]} />
             <Text style={styles.visionLabel}>{useVision ? "👁 Câmera ON" : "Câmera OFF"}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setAutoTts(!autoTts)}
+            style={({ pressed }) => [styles.visionToggle, pressed && { opacity: 0.7 }]}
+          >
+            <View style={[styles.visionCheck, autoTts && styles.visionCheckOn]} />
+            <Text style={styles.visionLabel}>
+              {isSpeaking ? "🔊 Falando..." : autoTts ? "🔊 Voz ON" : "🔇 Voz OFF"}
+            </Text>
           </Pressable>
         </View>
 

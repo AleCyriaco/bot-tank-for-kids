@@ -46,3 +46,6 @@
 - [x] Added /api/ai/stt_pi endpoint to Pi server (records from USB mic + Whisper STT in one call)
 - [ ] Remove 'Browser STT não suportado' warning from Pi's index.html web interface
 - [x] Move mic button higher up in Chat screen (above input row, large centered button)
+- [ ] Add TTS auto-playback on Pi speaker after AI response in Chat screen
+- [ ] Create v1.0.0 release presentation slides with narrated script
+- [ ] Push all latest changes to GitHub
