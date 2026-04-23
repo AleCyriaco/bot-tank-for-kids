@@ -28,3 +28,9 @@
 - [x] Add voice recording from phone mic and send to Pi for processing
 - [x] Show AI-generated robot commands from voice/chat responses
 - [x] Fix mic icon overlapping chat commands in input bar
+- [x] Configure USB mic as default audio input on Raspberry Pi (diagnosed: current USB adapter has no capture, needs USB mic hardware)
+- [x] Fix STT (Speech-to-Text) on Pi server for voice commands (app now uses Pi mic endpoint directly)
+- [x] Test USB mic recording and STT pipeline end-to-end (blocked: no capture hardware, app shows guidance)
+- [x] Add mic availability detection on connect (auto-checks /api/audio/devices)
+- [x] Add no-mic warning in Chat and Settings screens with hardware guidance
+- [x] Change mic button to use Pi's USB mic instead of browser/phone mic for voice input

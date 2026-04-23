@@ -305,7 +305,14 @@ export default function SettingsScreen() {
           )}
 
           {connected && !loadingDevices && audioDevices.length === 0 && (
-            <Text style={styles.noData}>Nenhum dispositivo encontrado</Text>
+            <View style={styles.noMicWarning}>
+              <Text style={styles.noMicTitle}>✗ Nenhum dispositivo de captura detectado</Text>
+              <Text style={styles.noMicText}>
+                O adaptador USB atual só tem saída de áudio (speaker).{"\n"}
+                Para entrada de voz, conecte um microfone USB separado.{"\n"}
+                Dica: rode "arecord -l" no terminal para confirmar a captura.
+              </Text>
+            </View>
           )}
 
           {audioDevices.map((device, i) => (
@@ -470,7 +477,7 @@ export default function SettingsScreen() {
           <InfoRow label="TTS Engine" value="pyttsx3 (Pi)" />
           <InfoRow label="Idioma" value="Português (pt-BR)" />
           <Text style={styles.helpText}>
-            Na aba Chat, toque no 🎤 para gravar do celular ou use "Mic Pi" para gravar pelo microfone USB do robô. A IA responde e pode controlar o robô automaticamente.
+            Na aba Chat, toque no 🎤 para gravar pelo microfone USB conectado ao Pi. O áudio é processado localmente pelo Whisper e enviado à IA. A IA vê pela câmera e pode controlar o robô automaticamente.
           </Text>
         </View>
 
@@ -798,5 +805,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     alignItems: "center",
+  },
+  noMicWarning: {
+    backgroundColor: "rgba(255,68,68,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,68,68,0.2)",
+    borderRadius: 8,
+    padding: 12,
+    gap: 6,
+  },
+  noMicTitle: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#FF6666",
+    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+  },
+  noMicText: {
+    fontSize: 11,
+    color: "#FF9999",
+    lineHeight: 18,
+    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
   },
 });

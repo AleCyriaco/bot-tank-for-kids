@@ -29,7 +29,7 @@ export default function ChatScreen() {
     {
       id: "welcome",
       role: "system",
-      text: '🤖 Tank Brain AI Assistant\nDiga "Wall-E" ou toque no microfone para conversar por voz!\nA IA vê pela câmera do robô em tempo real 👁',
+      text: '🤖 Tank Brain AI Assistant\nToque no 🎤 para falar pelo microfone USB do robô!\nA IA vê pela câmera do robô em tempo real 👁 e controla por comandos.',
       commands: [],
       timestamp: new Date(),
     },
@@ -37,16 +37,67 @@ export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [useVision, setUseVision] = useState(true);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isListening, setIsListening] = useState(false);
+  const [listenSeconds, setListenSeconds] = useState(0);
   const [autoExecCommands, setAutoExecCommands] = useState(true);
+  const [listenDuration, setListenDuration] = useState(5);
+  const [micAvailable, setMicAvailable] = useState<boolean | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const listenTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Pulse animation for recording indicator
+  // Check if Pi has a capture device (USB mic)
+  const checkMicAvailability = useCallback(async () => {
+    if (!connected) {
+      setMicAvailable(null);
+      return;
+    }
+    try {
+      const response = await fetch(`${baseUrl}/api/audio/devices`);
+      const data = await response.json();
+      let hasCapture = false;
+      if (data.ok) {
+        if (data.devices) {
+          hasCapture = data.devices.some((d: any) => d.type === "input");
+        } else if (data.input) {
+          hasCapture = Array.isArray(data.input) && data.input.length > 0;
+        }
+        // Also check arecord output if available
+        if (data.capture_devices !== undefined) {
+          hasCapture = data.capture_devices > 0;
+        }
+      }
+      setMicAvailable(hasCapture);
+      if (!hasCapture) {
+        // Only show warning once
+        setMessages((prev) => {
+          const alreadyWarned = prev.some((m) => m.text.includes("nenhum microfone"));
+          if (alreadyWarned) return prev;
+          return [
+            ...prev,
+            {
+              id: "mic-warning-" + Date.now(),
+              role: "system" as const,
+              text: "⚠ Nenhum microfone/captura detectado no Pi.\nO adaptador USB atual só tem saída de áudio.\nConecte um microfone USB dedicado para usar voz.\nDica: rode \"arecord -l\" no terminal do Pi.",
+              commands: [],
+              timestamp: new Date(),
+            },
+          ];
+        });
+      }
+    } catch {
+      // Can't check, assume unknown
+      setMicAvailable(null);
+    }
+  }, [connected, baseUrl]);
+
   useEffect(() => {
-    if (isRecording) {
+    checkMicAvailability();
+  }, [connected, checkMicAvailability]);
+
+  // Pulse animation for listening indicator
+  useEffect(() => {
+    if (isListening) {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
@@ -66,7 +117,7 @@ export default function ChatScreen() {
     } else {
       pulseAnim.setValue(1);
     }
-  }, [isRecording, pulseAnim]);
+  }, [isListening, pulseAnim]);
 
   const addMessage = useCallback((msg: Omit<ChatMessage, "id" | "timestamp">) => {
     const newMsg: ChatMessage = {
@@ -91,7 +142,6 @@ export default function ChatScreen() {
           }
         }, index * 500);
       });
-      // Stop after last command
       if (cmds.length > 0) {
         setTimeout(() => {
           sendCommand("S");
@@ -143,7 +193,6 @@ export default function ChatScreen() {
             commands: cmds,
           });
 
-          // Auto-execute commands
           if (cmds.length > 0) {
             executeCommands(cmds);
           }
@@ -172,245 +221,103 @@ export default function ChatScreen() {
     sendTextToAI(text);
   }, [input, sendTextToAI]);
 
-  // Voice recording - record from phone mic, send to Pi for STT
-  const startRecording = useCallback(async () => {
-    if (Platform.OS === "web") {
-      // Web: use MediaRecorder API
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-        const chunks: Blob[] = [];
-
-        mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) chunks.push(e.data);
-        };
-
-        mediaRecorder.onstop = async () => {
-          stream.getTracks().forEach((t) => t.stop());
-          const blob = new Blob(chunks, { type: "audio/webm" });
-          await sendAudioToSTT(blob);
-        };
-
-        (window as any).__tankMediaRecorder = mediaRecorder;
-        mediaRecorder.start();
-        setIsRecording(true);
-        setRecordingSeconds(0);
-        recordTimerRef.current = setInterval(() => {
-          setRecordingSeconds((s) => s + 1);
-        }, 1000);
-
-        if (Platform.OS !== "web") {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }
-      } catch (err: any) {
-        addMessage({
-          role: "error",
-          text: `Erro ao acessar microfone: ${err.message}`,
-        });
-      }
-    } else {
-      // Native: use expo-audio recording
-      try {
-        const ExpoAudio = await import("expo-audio");
-        const { granted } = await ExpoAudio.requestRecordingPermissionsAsync();
-        if (!granted) {
-          addMessage({
-            role: "error",
-            text: "Permissão de microfone negada. Habilite nas configurações do dispositivo.",
-          });
-          return;
-        }
-
-        await ExpoAudio.setAudioModeAsync({
-          playsInSilentMode: true,
-          allowsRecording: true,
-        });
-
-        const recorder = new ExpoAudio.AudioRecorder(ExpoAudio.RecordingPresets.HIGH_QUALITY);
-        await recorder.prepareToRecordAsync();
-        recorder.record();
-
-        (global as any).__tankRecorder = recorder;
-        setIsRecording(true);
-        setRecordingSeconds(0);
-        recordTimerRef.current = setInterval(() => {
-          setRecordingSeconds((s) => s + 1);
-        }, 1000);
-
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      } catch (err: any) {
-        addMessage({
-          role: "error",
-          text: `Erro ao iniciar gravação: ${err.message}`,
-        });
-      }
-    }
-  }, [addMessage]);
-
-  const stopRecording = useCallback(async () => {
-    if (recordTimerRef.current) {
-      clearInterval(recordTimerRef.current);
-      recordTimerRef.current = null;
-    }
-    setIsRecording(false);
-    setRecordingSeconds(0);
-
-    if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-
-    if (Platform.OS === "web") {
-      const mediaRecorder = (window as any).__tankMediaRecorder;
-      if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-      }
-    } else {
-      const recorder = (global as any).__tankRecorder;
-      if (recorder) {
-        try {
-          await recorder.stop();
-          const uri = recorder.uri;
-          if (uri) {
-            // Read file and send as blob
-            const ExpoFS = await import("expo-file-system/legacy");
-            const base64 = await ExpoFS.readAsStringAsync(uri, {
-              encoding: ExpoFS.EncodingType.Base64,
-            });
-            const byteChars = atob(base64);
-            const byteArray = new Uint8Array(byteChars.length);
-            for (let i = 0; i < byteChars.length; i++) {
-              byteArray[i] = byteChars.charCodeAt(i);
-            }
-            const blob = new Blob([byteArray], { type: "audio/m4a" });
-            await sendAudioToSTT(blob);
-          }
-        } catch (err: any) {
-          addMessage({
-            role: "error",
-            text: `Erro ao parar gravação: ${err.message}`,
-          });
-        }
-      }
-    }
-  }, [addMessage]);
-
-  // Send recorded audio to Pi's STT endpoint
-  const sendAudioToSTT = useCallback(
-    async (audioBlob: Blob) => {
-      if (!connected) {
-        addMessage({
-          role: "error",
-          text: "Não conectado ao Pi para transcrição de voz.",
-        });
-        return;
-      }
-
-      addMessage({
-        role: "voice",
-        text: "🎤 Processando voz...",
-      });
-
-      setLoading(true);
-      try {
-        const formData = new FormData();
-        formData.append("audio", audioBlob, "recording.webm");
-
-        const response = await fetch(`${baseUrl}/api/ai/stt`, {
-          method: "POST",
-          body: formData,
-        });
-        const data = await response.json();
-
-        if (data.ok && data.text) {
-          // Remove the "processing" message and show transcribed text
-          setMessages((prev) => prev.filter((m) => m.text !== "🎤 Processando voz..."));
-          addMessage({
-            role: "voice",
-            text: `🎤 "${data.text}"`,
-          });
-          // Send transcribed text to AI
-          await sendTextToAI(data.text);
-        } else {
-          setMessages((prev) => prev.filter((m) => m.text !== "🎤 Processando voz..."));
-          addMessage({
-            role: "error",
-            text: data.error || "Falha na transcrição de voz. Tente novamente.",
-          });
-        }
-      } catch (err: any) {
-        setMessages((prev) => prev.filter((m) => m.text !== "🎤 Processando voz..."));
-        addMessage({
-          role: "error",
-          text: `Erro de STT: ${err.message}`,
-        });
-      } finally {
-        setLoading(false);
-      }
-    },
-    [connected, baseUrl, addMessage, sendTextToAI]
-  );
-
-  // Use Pi's mic for STT (USB mic on Pi)
-  const usePiMic = useCallback(async () => {
+  // ========== PRIMARY VOICE: Use Pi's USB Mic ==========
+  // The main mic button now tells the Pi to record from its local USB mic,
+  // run STT (Whisper) on the recording, and return the transcribed text.
+  // This avoids browser STT issues entirely.
+  const startPiListening = useCallback(async () => {
     if (!connected) {
       addMessage({
         role: "error",
-        text: "Não conectado ao Pi.",
+        text: "Não conectado ao Pi. Vá em Settings para conectar.",
+      });
+      return;
+    }
+
+    // Check if mic is available
+    if (micAvailable === false) {
+      addMessage({
+        role: "error",
+        text: "⚠ Nenhum microfone USB detectado no Pi!\n\nO adaptador USB atual (JMTek USB PnP Audio) só tem saída de áudio (speaker).\n\nPara usar voz, conecte um dos seguintes:\n• Mini microfone USB (tipo pendrive)\n• Adaptador USB com entrada P2 de mic\n• Microfone USB de mesa\n\nApós conectar, rode \"arecord -l\" no Pi para confirmar.",
       });
       return;
     }
 
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+
+    setIsListening(true);
+    setListenSeconds(0);
+
+    // Start a visual countdown timer
+    listenTimerRef.current = setInterval(() => {
+      setListenSeconds((s) => s + 1);
+    }, 1000);
 
     addMessage({
       role: "voice",
-      text: "🎤 Ouvindo pelo microfone do Pi...",
+      text: `🎤 Ouvindo pelo microfone USB do robô (${listenDuration}s)...`,
     });
 
     setLoading(true);
     try {
-      const response = await fetch(`${baseUrl}/api/audio/test_mic`, {
+      // Call Pi's STT endpoint which records from USB mic and transcribes
+      const response = await fetch(`${baseUrl}/api/ai/stt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ duration: 5 }),
+        body: JSON.stringify({ duration: listenDuration, use_pi_mic: true }),
       });
       const data = await response.json();
 
+      // Clear the "listening" message
       setMessages((prev) =>
-        prev.filter((m) => m.text !== "🎤 Ouvindo pelo microfone do Pi...")
+        prev.filter(
+          (m) => !m.text.startsWith("🎤 Ouvindo pelo microfone USB")
+        )
       );
 
-      if (data.ok && data.text) {
+      if (data.ok && data.text && data.text.trim()) {
         addMessage({
           role: "voice",
-          text: `🎤 Pi ouviu: "${data.text}"`,
+          text: `🎤 "${data.text}"`,
         });
+        // Send transcribed text to AI chat
         await sendTextToAI(data.text);
       } else if (data.ok) {
         addMessage({
           role: "system",
-          text: "Mic do Pi testado com sucesso. Use /api/ai/stt para transcrição.",
+          text: "Nenhuma fala detectada. Tente novamente mais perto do microfone.",
         });
       } else {
         addMessage({
           role: "error",
-          text: data.error || "Falha ao usar microfone do Pi.",
+          text: data.error || "Falha na transcrição de voz. Verifique o microfone USB.",
         });
       }
     } catch (err: any) {
       setMessages((prev) =>
-        prev.filter((m) => m.text !== "🎤 Ouvindo pelo microfone do Pi...")
+        prev.filter(
+          (m) => !m.text.startsWith("🎤 Ouvindo pelo microfone USB")
+        )
       );
       addMessage({
         role: "error",
-        text: `Erro mic Pi: ${err.message}`,
+        text: `Erro ao ouvir: ${err.message}`,
       });
     } finally {
       setLoading(false);
+      setIsListening(false);
+      setListenSeconds(0);
+      if (listenTimerRef.current) {
+        clearInterval(listenTimerRef.current);
+        listenTimerRef.current = null;
+      }
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
     }
-  }, [connected, baseUrl, addMessage, sendTextToAI]);
+  }, [connected, baseUrl, listenDuration, addMessage, sendTextToAI]);
 
   // Quick voice commands
   const quickCommands = [
@@ -487,6 +394,8 @@ export default function ChatScreen() {
             <Text style={styles.headerTitle}>Wall-E AI</Text>
             <Text style={styles.headerSubtitle}>
               {useVision ? "👁 Visão ativa" : "💬 Texto"}
+              {" | Mic: "}
+              {micAvailable === null ? "..." : micAvailable ? "USB Pi ✓" : "Não detectado ✗"}
             </Text>
           </View>
           <View style={styles.headerRight}>
@@ -555,14 +464,14 @@ export default function ChatScreen() {
             <View style={styles.typingBubble}>
               <ActivityIndicator size="small" color="#00FF88" />
               <Text style={styles.typingText}>
-                {isRecording ? "Gravando..." : "Pensando..."}
+                {isListening ? `Ouvindo... ${listenSeconds}s` : "Pensando..."}
               </Text>
             </View>
           </View>
         )}
 
-        {/* Recording indicator */}
-        {isRecording && (
+        {/* Listening indicator (Pi mic active) */}
+        {isListening && (
           <View style={styles.recordingBar}>
             <Animated.View
               style={[
@@ -571,21 +480,12 @@ export default function ChatScreen() {
               ]}
             />
             <Text style={styles.recordingText}>
-              Gravando... {recordingSeconds}s
+              🎤 Mic USB Pi ouvindo... {listenSeconds}/{listenDuration}s
             </Text>
-            <Pressable
-              onPress={stopRecording}
-              style={({ pressed }) => [
-                styles.stopRecBtn,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={styles.stopRecText}>PARAR</Text>
-            </Pressable>
           </View>
         )}
 
-        {/* Vision toggle + options */}
+        {/* Options row: vision toggle + listen duration */}
         <View style={styles.optionsRow}>
           <Pressable
             onPress={() => setUseVision(!useVision)}
@@ -601,39 +501,52 @@ export default function ChatScreen() {
               {useVision ? "👁 Câmera ON" : "Câmera OFF"}
             </Text>
           </Pressable>
+          <View style={styles.durationRow}>
+            <Text style={styles.durationLabel}>Duração:</Text>
+            {[3, 5, 8, 10].map((d) => (
+              <Pressable
+                key={d}
+                onPress={() => setListenDuration(d)}
+                style={({ pressed }) => [
+                  styles.durationBtn,
+                  listenDuration === d && styles.durationBtnActive,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.durationBtnText,
+                    listenDuration === d && styles.durationBtnTextActive,
+                  ]}
+                >
+                  {d}s
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        {/* Input row */}
+        <View style={styles.inputRow}>
+          {/* Mic button - uses Pi's USB mic */}
           <Pressable
-            onPress={usePiMic}
+            onPress={startPiListening}
             style={({ pressed }) => [
-              styles.piMicBtn,
+              styles.micBtn,
+              isListening && styles.micBtnListening,
               pressed && { opacity: 0.7 },
+              (loading || !connected) && !isListening && { opacity: 0.4 },
             ]}
             disabled={loading || !connected}
           >
-            <Text style={styles.piMicText}>🔊 Mic Pi</Text>
-          </Pressable>
-        </View>
-
-        {/* Input */}
-        <View style={styles.inputRow}>
-          {/* Mic button */}
-          <Pressable
-            onPress={isRecording ? stopRecording : startRecording}
-            style={({ pressed }) => [
-              styles.micBtn,
-              isRecording && styles.micBtnRecording,
-              pressed && { opacity: 0.7 },
-              loading && !isRecording && { opacity: 0.4 },
-            ]}
-            disabled={loading && !isRecording}
-          >
-            <Text style={styles.micBtnText}>{isRecording ? "⏹" : "🎤"}</Text>
+            <Text style={styles.micBtnText}>{isListening ? "🔴" : "🎤"}</Text>
           </Pressable>
 
           <TextInput
             style={styles.textInput}
             value={input}
             onChangeText={setInput}
-            placeholder='Diga "Wall-E" ou digite...'
+            placeholder="Digite ou fale algo..."
             placeholderTextColor="#555"
             returnKeyType="send"
             onSubmitEditing={sendMessage}
@@ -674,6 +587,7 @@ const styles = StyleSheet.create({
   },
   headerLeft: {
     gap: 2,
+    flexShrink: 1,
   },
   headerTitle: {
     fontSize: 18,
@@ -880,35 +794,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: "rgba(255,68,68,0.08)",
+    backgroundColor: "rgba(122,162,247,0.08)",
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,68,68,0.2)",
+    borderTopColor: "rgba(122,162,247,0.2)",
     gap: 10,
   },
   recordingDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: "#FF4444",
+    backgroundColor: "#7AA2F7",
   },
   recordingText: {
     flex: 1,
     fontSize: 12,
-    color: "#FF6666",
-    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
-  },
-  stopRecBtn: {
-    backgroundColor: "rgba(255,68,68,0.15)",
-    borderWidth: 1,
-    borderColor: "#FF4444",
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  stopRecText: {
-    fontSize: 11,
-    color: "#FF4444",
-    fontWeight: "bold",
+    color: "#7AA2F7",
     fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
   },
   optionsRow: {
@@ -940,18 +840,36 @@ const styles = StyleSheet.create({
     color: "#8B949E",
     fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
   },
-  piMicBtn: {
-    backgroundColor: "rgba(122,162,247,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(122,162,247,0.3)",
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+  durationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
-  piMicText: {
-    fontSize: 11,
-    color: "#7AA2F7",
+  durationLabel: {
+    fontSize: 10,
+    color: "#8B949E",
     fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+    marginRight: 2,
+  },
+  durationBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#30363D",
+    backgroundColor: "#21262D",
+  },
+  durationBtnActive: {
+    borderColor: "#7AA2F7",
+    backgroundColor: "rgba(122,162,247,0.15)",
+  },
+  durationBtnText: {
+    fontSize: 10,
+    color: "#8B949E",
+    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+  },
+  durationBtnTextActive: {
+    color: "#7AA2F7",
   },
   inputRow: {
     flexDirection: "row",
@@ -973,9 +891,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexShrink: 0,
   },
-  micBtnRecording: {
-    backgroundColor: "rgba(255,68,68,0.2)",
-    borderColor: "#FF4444",
+  micBtnListening: {
+    backgroundColor: "rgba(122,162,247,0.3)",
+    borderColor: "#7AA2F7",
   },
   micBtnText: {
     fontSize: 15,
