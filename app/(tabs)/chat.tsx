@@ -309,6 +309,45 @@ export default function ChatScreen() {
           ))}
         </View>
 
+        {/* Mic Button — large, centered, right below quick commands */}
+        <View style={styles.micSection}>
+          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+            <Pressable
+              onPress={handleMicPress}
+              style={({ pressed }) => [
+                styles.micBtnLarge,
+                isListening && styles.micBtnLargeListening,
+                pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] },
+                (loading || !connected) && !isListening && { opacity: 0.35 },
+              ]}
+              disabled={(loading || !connected) && !isListening}
+            >
+              <Text style={styles.micBtnLargeIcon}>{isListening ? "🔴" : "🎤"}</Text>
+              <Text style={styles.micBtnLargeLabel}>
+                {isListening ? `Gravando... ${listenSeconds}/${listenDuration}s` : "Falar com Wall-E"}
+              </Text>
+            </Pressable>
+          </Animated.View>
+          <View style={styles.durationRow}>
+            <Text style={styles.durationLabel}>Duração:</Text>
+            {[3, 5, 8, 10].map((d) => (
+              <Pressable
+                key={d}
+                onPress={() => setListenDuration(d)}
+                style={({ pressed }) => [
+                  styles.durationBtn,
+                  listenDuration === d && styles.durationBtnActive,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={[styles.durationBtnText, listenDuration === d && styles.durationBtnTextActive]}>
+                  {d}s
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
         {/* Messages */}
         <FlatList
           ref={flatListRef}
@@ -331,16 +370,6 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {/* Listening bar */}
-        {isListening && (
-          <View style={styles.recordingBar}>
-            <Animated.View style={[styles.recordingDot, { transform: [{ scale: pulseAnim }] }]} />
-            <Text style={styles.recordingText}>
-              🎤 Mic USB Pi gravando... {listenSeconds}/{listenDuration}s
-            </Text>
-          </View>
-        )}
-
         {/* Options row */}
         <View style={styles.optionsRow}>
           <Pressable
@@ -350,46 +379,15 @@ export default function ChatScreen() {
             <View style={[styles.visionCheck, useVision && styles.visionCheckOn]} />
             <Text style={styles.visionLabel}>{useVision ? "👁 Câmera ON" : "Câmera OFF"}</Text>
           </Pressable>
-          <View style={styles.durationRow}>
-            <Text style={styles.durationLabel}>Duração:</Text>
-            {[3, 5, 8, 10].map((d) => (
-              <Pressable
-                key={d}
-                onPress={() => setListenDuration(d)}
-                style={({ pressed }) => [
-                  styles.durationBtn,
-                  listenDuration === d && styles.durationBtnActive,
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <Text style={[styles.durationBtnText, listenDuration === d && styles.durationBtnTextActive]}>
-                  {d}s
-                </Text>
-              </Pressable>
-            ))}
-          </View>
         </View>
 
-        {/* Input row */}
+        {/* Input row — text only */}
         <View style={styles.inputRow}>
-          <Pressable
-            onPress={handleMicPress}
-            style={({ pressed }) => [
-              styles.micBtn,
-              isListening && styles.micBtnListening,
-              pressed && { opacity: 0.7 },
-              (loading || !connected) && !isListening && { opacity: 0.4 },
-            ]}
-            disabled={(loading || !connected) && !isListening}
-          >
-            <Text style={styles.micBtnText}>{isListening ? "🔴" : "🎤"}</Text>
-          </Pressable>
-
           <TextInput
             style={styles.textInput}
             value={input}
             onChangeText={setInput}
-            placeholder="Digite ou fale algo..."
+            placeholder="Ou digite uma mensagem..."
             placeholderTextColor="#555"
             returnKeyType="send"
             onSubmitEditing={sendMessage}
@@ -568,7 +566,44 @@ const styles = StyleSheet.create({
   },
   visionCheckOn: { backgroundColor: "#7AA2F7", borderColor: "#7AA2F7" },
   visionLabel: { fontSize: 11, color: "#9BA1A6" },
-  durationRow: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: "auto" },
+  micSection: {
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#1E2A3A",
+    backgroundColor: "rgba(0,255,136,0.03)",
+  },
+  micBtnLarge: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#1E2A1E",
+    borderRadius: 28,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderWidth: 2,
+    borderColor: "#00FF88",
+    minWidth: 200,
+  },
+  micBtnLargeListening: {
+    backgroundColor: "rgba(0,255,136,0.18)",
+    borderColor: "#00FF88",
+    shadowColor: "#00FF88",
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  micBtnLargeIcon: { fontSize: 26 },
+  micBtnLargeLabel: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#00FF88",
+    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+  },
+  durationRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   durationLabel: { fontSize: 10, color: "#555" },
   durationBtn: {
     paddingHorizontal: 6,

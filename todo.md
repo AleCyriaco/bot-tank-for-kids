@@ -44,3 +44,5 @@
 - [ ] Create v1.0.0 release presentation script and slide deck
 - [x] Chat screen: use Pi USB mic (same method as hardware test screen) for voice recording
 - [x] Added /api/ai/stt_pi endpoint to Pi server (records from USB mic + Whisper STT in one call)
+- [ ] Remove 'Browser STT não suportado' warning from Pi's index.html web interface
+- [x] Move mic button higher up in Chat screen (above input row, large centered button)
