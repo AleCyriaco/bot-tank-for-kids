@@ -42,3 +42,5 @@
 - [x] Fix STT browser warning appearing repeatedly in Chat screen
 - [x] Add API key configuration UI in Settings (for OpenAI/Claude)
 - [ ] Create v1.0.0 release presentation script and slide deck
+- [x] Chat screen: use Pi USB mic (same method as hardware test screen) for voice recording
+- [x] Added /api/ai/stt_pi endpoint to Pi server (records from USB mic + Whisper STT in one call)
