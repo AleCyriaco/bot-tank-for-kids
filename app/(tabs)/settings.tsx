@@ -99,6 +99,8 @@ export default function SettingsScreen() {
   const [testingMic, setTestingMic] = useState(false);
   const [testingSpeaker, setTestingSpeaker] = useState(false);
   const [micTestResult, setMicTestResult] = useState<string | null>(null);
+  const [micVolume, setMicVolume] = useState(100);
+  const [hasMic, setHasMic] = useState(false);
 
   const handleConnect = useCallback(() => {
     setPiAddress(localIp);
@@ -141,13 +143,15 @@ export default function SettingsScreen() {
     }
   }, [connected, baseUrl]);
 
-  // Fetch volume from Pi
+  // Fetch speaker volume from Pi
   const fetchVolume = useCallback(async () => {
     if (!connected) return;
     try {
       const response = await fetch(`${baseUrl}/api/audio/volume_get`);
       const data = await response.json();
-      if (data.ok && typeof data.volume === "number") {
+      if (data.ok && typeof data.percent === "number") {
+        setVolume(data.percent);
+      } else if (data.ok && typeof data.volume === "number") {
         setVolume(data.volume);
       }
     } catch {
@@ -155,12 +159,30 @@ export default function SettingsScreen() {
     }
   }, [connected, baseUrl]);
 
+  // Fetch mic volume from Pi
+  const fetchMicVolume = useCallback(async () => {
+    if (!connected) return;
+    try {
+      const response = await fetch(`${baseUrl}/api/audio/mic_volume_get`);
+      const data = await response.json();
+      if (data.ok && typeof data.percent === "number") {
+        setMicVolume(data.percent);
+        setHasMic(true);
+      } else {
+        setHasMic(false);
+      }
+    } catch {
+      setHasMic(false);
+    }
+  }, [connected, baseUrl]);
+
   useEffect(() => {
     if (connected) {
       fetchAudioDevices();
       fetchVolume();
+      fetchMicVolume();
     }
-  }, [connected, fetchAudioDevices, fetchVolume]);
+  }, [connected, fetchAudioDevices, fetchVolume, fetchMicVolume]);
 
   const handleVolumeChange = useCallback(
     async (val: number) => {
@@ -168,6 +190,21 @@ export default function SettingsScreen() {
       if (!connected) return;
       try {
         await fetch(`${baseUrl}/api/audio/volume`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ percent: val }),
+        });
+      } catch {}
+    },
+    [connected, baseUrl]
+  );
+
+  const handleMicVolumeChange = useCallback(
+    async (val: number) => {
+      setMicVolume(val);
+      if (!connected) return;
+      try {
+        await fetch(`${baseUrl}/api/audio/mic_volume`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ percent: val }),
@@ -417,8 +454,9 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>CONTROLES DE ÁUDIO</Text>
 
+          <Text style={styles.sectionLabel}>🔊 VOLUME DO SPEAKER</Text>
           <View style={styles.volumeRow}>
-            <Text style={styles.volumeLabel}>Volume</Text>
+            <Text style={styles.volumeLabel}>Speaker</Text>
             <Pressable
               onPress={() => handleVolumeChange(Math.max(0, volume - 10))}
               style={({ pressed }) => [styles.volBtn, pressed && { opacity: 0.7 }]}
@@ -433,6 +471,33 @@ export default function SettingsScreen() {
               <Text style={styles.volBtnText}>+</Text>
             </Pressable>
           </View>
+
+          {hasMic && (
+            <>
+              <Text style={styles.sectionLabel}>🎤 VOLUME DO MICROFONE</Text>
+              <View style={styles.volumeRow}>
+                <Text style={styles.volumeLabel}>Mic USB</Text>
+                <Pressable
+                  onPress={() => handleMicVolumeChange(Math.max(0, micVolume - 10))}
+                  style={({ pressed }) => [styles.volBtn, pressed && { opacity: 0.7 }]}
+                >
+                  <Text style={styles.volBtnText}>-</Text>
+                </Pressable>
+                <Text style={styles.volumeValue}>{micVolume}%</Text>
+                <Pressable
+                  onPress={() => handleMicVolumeChange(Math.min(100, micVolume + 10))}
+                  style={({ pressed }) => [styles.volBtn, pressed && { opacity: 0.7 }]}
+                >
+                  <Text style={styles.volBtnText}>+</Text>
+                </Pressable>
+              </View>
+              <View style={styles.micGainHint}>
+                <Text style={styles.micGainHintText}>
+                  Ganho do microfone USB. Aumente se o áudio estiver baixo, diminua se estiver distorcido.
+                </Text>
+              </View>
+            </>
+          )}
 
           <View style={styles.btnRow}>
             <Pressable
@@ -825,5 +890,16 @@ const styles = StyleSheet.create({
     color: "#FF9999",
     lineHeight: 18,
     fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+  },
+  micGainHint: {
+    backgroundColor: "rgba(122,162,247,0.08)",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  micGainHintText: {
+    fontSize: 11,
+    color: "#7AA2F7",
+    lineHeight: 16,
   },
 });

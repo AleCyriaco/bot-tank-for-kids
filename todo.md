@@ -34,3 +34,5 @@
 - [x] Add mic availability detection on connect (auto-checks /api/audio/devices)
 - [x] Add no-mic warning in Chat and Settings screens with hardware guidance
 - [x] Change mic button to use Pi's USB mic instead of browser/phone mic for voice input
+- [x] Add mic volume control to Settings screen (adjust USB mic gain from app)
+- [x] Add mic volume GET/SET endpoints to Pi tank_server.py
