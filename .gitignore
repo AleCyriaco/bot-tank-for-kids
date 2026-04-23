@@ -63,3 +63,17 @@ Thumbs.db
 
 # Webdev artifacts (checkpoint zips, migrations, etc.)
 .webdev/
+
+# ── Sensitive / Pi config files ──────────────────────────────────────────────
+ai_config.json
+secrets.json
+*.pem
+
+# ── Python (Pi helper scripts) ───────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+add_mic_volume.py
+asoundrc_pi

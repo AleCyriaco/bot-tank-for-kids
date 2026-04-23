@@ -36,3 +36,6 @@
 - [x] Change mic button to use Pi's USB mic instead of browser/phone mic for voice input
 - [x] Add mic volume control to Settings screen (adjust USB mic gain from app)
 - [x] Add mic volume GET/SET endpoints to Pi tank_server.py
+- [ ] Add .gitignore to protect sensitive files (ai_config.json, .env, etc.)
+- [ ] Create GitHub release v1.0
+- [ ] Add repository topics (raspberry-pi, expo, react-native, robot, iot)
